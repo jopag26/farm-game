@@ -8,7 +8,7 @@
     body { background: #1a1a2e; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; font-family: 'Courier New', monospace; color: #fff; }
     #ui { display: flex; gap: 30px; margin-bottom: 10px; font-size: 18px; }
     #ui span { background: rgba(255,255,255,0.1); padding: 6px 16px; border-radius: 8px; }
-    canvas { border: 3px solid #4a7c59; border-radius: 4px; cursor: none; }
+    canvas { border: 3px solid #4a7c59; border-radius: 4px; cursor: default; }
     #overlay { position: absolute; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; }
     #overlay h1 { font-size: 48px; text-shadow: 2px 2px 8px #000; }
     #overlay p { font-size: 20px; color: #ccc; text-align: center; max-width: 400px; }
@@ -19,13 +19,13 @@
 <body>
 <div id="ui">
   <span>Runde: <b id="roundNum">1</b></span>
-  <span>Gegner: <b id="enemyCount">20</b>/20</span>
+  <span>Gegner: <b id="enemyCount">10</b>/10</span>
   <span>Hühner: <b id="chickenCount">5</b></span>
 </div>
 <canvas id="canvas" width="800" height="560"></canvas>
 <div id="overlay">
   <h1>🌾 Hühnerhof-Verteidiger</h1>
-  <p>Verteidige deine Hühner! Halte die Monster mit deiner Heugabel fern.<br><br>WASD / Pfeiltasten = Bewegen<br>Maus = Zielen &amp; Schlagen</p>
+  <p>Verteidige deine Hühner! Halte die Monster mit deiner Heugabel fern.<br><br>WASD / Pfeiltasten = Bewegen<br>Leertaste = Angriff (in Bewegungsrichtung)</p>
   <button id="startBtn">Spiel starten</button>
 </div>
 
@@ -37,22 +37,19 @@ const startBtn = document.getElementById('startBtn');
 
 const W = canvas.width, H = canvas.height;
 
-const TOTAL_ENEMIES = 20;
-const SPAWN_INTERVAL = 2200;
-const CHICKEN_COUNT = 5;
+const TOTAL_ENEMIES = 10;
+const SPAWN_INTERVAL = 1400;
+const CHICKEN_COUNT = 12;
 
 let state = 'menu';
 let player, enemies, chickens, particles, attackCooldown, spawnTimer, spawnedCount, attackAnim;
-let mouse = { x: W/2, y: H/2 };
+let facingAngle = 0;
 let keys = {};
 
-canvas.addEventListener('mousemove', e => {
-  const r = canvas.getBoundingClientRect();
-  mouse.x = e.clientX - r.left;
-  mouse.y = e.clientY - r.top;
+window.addEventListener('keydown', e => {
+  keys[e.key] = true;
+  if (e.code === 'Space' && state === 'playing') { e.preventDefault(); tryAttack(); }
 });
-canvas.addEventListener('mousedown', () => { if (state === 'playing') tryAttack(); });
-window.addEventListener('keydown', e => { keys[e.key] = true; });
 window.addEventListener('keyup', e => { keys[e.key] = false; });
 
 startBtn.addEventListener('click', startGame);
@@ -61,7 +58,8 @@ function startGame() {
   overlay.style.display = 'none';
   state = 'playing';
 
-  player = { x: W/2, y: H/2, r: 18, speed: 3.2, hp: 100, maxHp: 100, attackRange: 90, attackAngle: Math.PI * 0.6 };
+  player = { x: W/2, y: H/2, r: 18, speed: 5.0, hp: 100, maxHp: 100, attackRange: 95, attackAngle: Math.PI * 0.7 };
+  facingAngle = 0;
   enemies = [];
   particles = [];
   attackCooldown = 0;
@@ -88,10 +86,10 @@ function startGame() {
 
 function tryAttack() {
   if (attackCooldown > 0) return;
-  attackCooldown = 38;
-  attackAnim = 38;
+  attackCooldown = 28;
+  attackAnim = 28;
 
-  const angle = Math.atan2(mouse.y - player.y, mouse.x - player.x);
+  const angle = facingAngle;
   for (let e of enemies) {
     if (!e.alive) continue;
     const dx = e.x - player.x, dy = e.y - player.y;
@@ -130,7 +128,7 @@ function spawnEnemy() {
     x, y, r: type === 'fast' ? 12 : 16,
     hp: type === 'fast' ? 50 : 100,
     maxHp: type === 'fast' ? 50 : 100,
-    speed: type === 'fast' ? 2.4 : 1.4,
+    speed: type === 'fast' ? 3.2 : 2.0,
     alive: true,
     type,
     target: null,
@@ -164,7 +162,7 @@ function update(dt) {
   if (keys['a'] || keys['A'] || keys['ArrowLeft']) dx -= 1;
   if (keys['d'] || keys['D'] || keys['ArrowRight']) dx += 1;
   const len = Math.hypot(dx, dy);
-  if (len > 0) { dx /= len; dy /= len; }
+  if (len > 0) { dx /= len; dy /= len; facingAngle = Math.atan2(dy, dx); }
   player.x = Math.max(player.r, Math.min(W - player.r, player.x + dx * player.speed));
   player.y = Math.max(player.r, Math.min(H - player.r, player.y + dy * player.speed));
 
@@ -260,7 +258,7 @@ function checkWin() {
     overlay.style.display = 'flex';
     overlay.innerHTML = `
       <h1 style="color:#7fff7f">🏆 Gewonnen!</h1>
-      <p>Du hast alle 20 Monster besiegt!<br>${aliveChickens} Hühner sind noch am Leben.</p>
+      <p>Du hast alle 10 Monster besiegt!<br>${aliveChickens} Hühner sind noch am Leben.</p>
       <button id="startBtn" onclick="location.reload()" style="font-size:20px;padding:12px 32px;background:#4a7c59;color:#fff;border:none;border-radius:8px;cursor:pointer;font-family:inherit">Nochmal spielen</button>`;
   } else if (aliveChickens === 0) {
     state = 'lost';
@@ -374,7 +372,7 @@ function drawEnemy(e) {
 }
 
 function drawPlayer() {
-  const angle = Math.atan2(mouse.y - player.y, mouse.x - player.x);
+  const angle = facingAngle;
 
   // Schatten
   ctx.fillStyle = 'rgba(0,0,0,0.2)';
@@ -399,7 +397,7 @@ function drawPlayer() {
   // Heugabel
   ctx.save();
   ctx.translate(player.x, player.y);
-  ctx.rotate(angle + (attackAnim > 0 ? -0.6 + (attackAnim / 38) * 0.6 : 0));
+  ctx.rotate(angle + (attackAnim > 0 ? -0.6 + (attackAnim / 28) * 0.6 : 0));
   // Stiel
   ctx.strokeStyle = '#8B6914';
   ctx.lineWidth = 4;
@@ -427,11 +425,14 @@ function drawPlayer() {
 }
 
 function drawCursor() {
-  ctx.strokeStyle = '#ffff00';
-  ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.arc(mouse.x, mouse.y, 8, 0, Math.PI * 2); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(mouse.x - 12, mouse.y); ctx.lineTo(mouse.x + 12, mouse.y); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(mouse.x, mouse.y - 12); ctx.lineTo(mouse.x, mouse.y + 12); ctx.stroke();
+  // Leertaste-Anzeige unten rechts
+  const ready = attackCooldown === 0;
+  ctx.fillStyle = ready ? 'rgba(255,255,100,0.85)' : 'rgba(100,100,100,0.6)';
+  ctx.beginPath(); ctx.roundRect(W - 110, H - 38, 100, 28, 6); ctx.fill();
+  ctx.fillStyle = ready ? '#000' : '#aaa';
+  ctx.font = 'bold 14px Courier New';
+  ctx.textAlign = 'center';
+  ctx.fillText('LEERTASTE', W - 60, H - 19);
 }
 
 function draw() {
