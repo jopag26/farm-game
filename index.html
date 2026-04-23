@@ -1,377 +1,582 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-  <meta charset="UTF-8">
-  <title>Hühnerhof-Verteidiger</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { background: #1a1a2e; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; font-family: 'Courier New', monospace; color: #fff; }
-    #ui { display: flex; gap: 30px; margin-bottom: 10px; font-size: 18px; }
-    #ui span { background: rgba(255,255,255,0.1); padding: 6px 16px; border-radius: 8px; }
-    canvas { border: 3px solid #4a7c59; border-radius: 4px; cursor: default; }
-    #overlay { position: absolute; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; }
-    #overlay h1 { font-size: 48px; text-shadow: 2px 2px 8px #000; }
-    #overlay p { font-size: 20px; color: #ccc; text-align: center; max-width: 400px; }
-    #startBtn { font-size: 20px; padding: 12px 32px; background: #4a7c59; color: #fff; border: none; border-radius: 8px; cursor: pointer; font-family: inherit; }
-    #startBtn:hover { background: #5a9c6f; }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hühnerjagd auf dem Bauernhof</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #7CB342; /* Vibrant grass green */
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            user-select: none;
+        }
+        canvas {
+            display: block;
+        }
+        
+        /* Farm Dirt Pattern Background Overlay */
+        .farm-bg {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            opacity: 0.1;
+            background-image: radial-gradient(#3E2723 15%, transparent 16%), radial-gradient(#3E2723 15%, transparent 16%);
+            background-size: 60px 60px;
+            background-position: 0 0, 30px 30px;
+            pointer-events: none;
+        }
+
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        .panel {
+            background: rgba(255, 255, 255, 0.9);
+            padding: 20px 30px;
+            border-radius: 16px;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.15);
+            pointer-events: auto;
+            display: inline-block;
+            backdrop-filter: blur(5px);
+            border: 2px solid rgba(255,255,255,0.5);
+        }
+        h1 { margin: 0 0 10px 0; color: #2E7D32; font-size: 28px; font-weight: 800; }
+        p { margin: 5px 0; color: #424242; font-size: 16px; font-weight: 500;}
+        
+        .controls-hint {
+            display: flex;
+            gap: 15px;
+            margin-top: 15px;
+            background: #f5f5f5;
+            padding: 10px;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+        .key {
+            background: #fff;
+            border: 1px solid #ccc;
+            border-bottom: 3px solid #ccc;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-weight: bold;
+            color: #333;
+        }
+
+        #win-screen {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.4s ease;
+            z-index: 10;
+        }
+        #win-screen.visible {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .win-box {
+            background: white;
+            padding: 50px;
+            border-radius: 24px;
+            text-align: center;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.4);
+            transform: translateY(50px) scale(0.9);
+            transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            max-width: 400px;
+        }
+        #win-screen.visible .win-box {
+            transform: translateY(0) scale(1);
+        }
+        .win-box h2 {
+            font-size: 42px;
+            color: #4CAF50;
+            margin: 0 0 15px 0;
+        }
+        .win-box p {
+            font-size: 18px;
+            margin-bottom: 30px;
+            line-height: 1.5;
+        }
+        button {
+            background: linear-gradient(135deg, #FF9800, #F57C00);
+            color: white;
+            border: none;
+            padding: 14px 32px;
+            font-size: 20px;
+            border-radius: 12px;
+            cursor: pointer;
+            font-weight: bold;
+            box-shadow: 0 4px 10px rgba(255, 152, 0, 0.4);
+            transition: all 0.2s ease;
+        }
+        button:hover { 
+            background: linear-gradient(135deg, #FFB74D, #FF9800);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 15px rgba(255, 152, 0, 0.5);
+        }
+        button:active { 
+            transform: translateY(1px);
+            box-shadow: 0 2px 5px rgba(255, 152, 0, 0.4);
+        }
+        
+        .catch-hint {
+            position: absolute;
+            color: white;
+            font-weight: bold;
+            font-size: 14px;
+            background: rgba(0,0,0,0.6);
+            padding: 4px 8px;
+            border-radius: 12px;
+            pointer-events: none;
+            transition: opacity 0.2s;
+            opacity: 0;
+        }
+        .catch-hint.visible {
+            opacity: 1;
+        }
+    </style>
 </head>
 <body>
-<div id="ui">
-  <span>Hühner: <b id="chickenCount">12</b></span>
-</div>
-<canvas id="canvas" width="800" height="560"></canvas>
-<div id="overlay">
-  <h1>🌾 Hühnerhof-Verteidiger</h1>
-  <p>Halte die Hühner auf dem Hof! Erschrecke sie mit deiner Heugabel, damit sie nicht weglaufen.<br><br>WASD / Pfeiltasten = Bewegen<br>Leertaste = Heugabel schwingen</p>
-  <button id="startBtn">Spiel starten</button>
-</div>
-
-<script>
-const canvas = document.getElementById('canvas');
-const ctx = canvas.getContext('2d');
-const overlay = document.getElementById('overlay');
-const startBtn = document.getElementById('startBtn');
-
-const W = canvas.width, H = canvas.height;
-
-const CHICKEN_COUNT = 12;
-const GAME_DURATION = 60; // 60 seconds
-
-let state = 'menu';
-let player, chickens, particles, attackCooldown, attackAnim;
-let facingAngle = 0;
-let keys = {};
-let timeLeft = 0;
-
-window.addEventListener('keydown', e => {
-  keys[e.key] = true;
-  if (e.code === 'Space' && state === 'playing') { e.preventDefault(); tryAttack(); }
-});
-window.addEventListener('keyup', e => { keys[e.key] = false; });
-
-startBtn.addEventListener('click', startGame);
-
-function startGame() {
-  overlay.style.display = 'none';
-  state = 'playing';
-  timeLeft = GAME_DURATION;
-
-  player = { x: W/2, y: H/2, r: 18, speed: 5.0, hp: 100, maxHp: 100, attackRange: 95, attackAngle: Math.PI * 0.7 };
-  facingAngle = 0;
-  particles = [];
-  attackCooldown = 0;
-  attackAnim = 0;
-
-  chickens = [];
-  for (let i = 0; i < CHICKEN_COUNT; i++) {
-    chickens.push({
-      x: 200 + Math.random() * 400,
-      y: 200 + Math.random() * 200,
-      r: 12,
-      vx: (Math.random() - 0.5) * 0.6,
-      vy: (Math.random() - 0.5) * 0.6,
-      wanderTimer: Math.random() * 120,
-      state: 'wander', // wander or flee or scared
-      alive: true
-    });
-  }
-
-  updateUI();
-  requestAnimationFrame(gameLoop);
-}
-
-function tryAttack() {
-  if (attackCooldown > 0) return;
-  attackCooldown = 28;
-  attackAnim = 28;
-
-  const angle = facingAngle;
-  for (let c of chickens) {
-    if (!c.alive) continue;
-    const dx = c.x - player.x, dy = c.y - player.y;
-    const dist = Math.hypot(dx, dy);
-    if (dist > player.attackRange) continue;
-    const eAngle = Math.atan2(dy, dx);
-    let diff = Math.abs(angle - eAngle);
-    if (diff > Math.PI) diff = 2 * Math.PI - diff;
-    if (diff < player.attackAngle / 2) {
-      // Scare the chicken away from the player
-      c.state = 'scared';
-      c.wanderTimer = 60; // Run away for 60 frames
-      const pushAngle = Math.atan2(dy, dx);
-      c.vx = Math.cos(pushAngle) * 3.5;
-      c.vy = Math.sin(pushAngle) * 3.5;
-      spawnHitParticles(c.x, c.y, '#ffffff');
-    }
-  }
-}
-
-function spawnHitParticles(x, y, color) {
-  for (let i = 0; i < 8; i++) {
-    const a = Math.random() * Math.PI * 2;
-    const s = 2 + Math.random() * 3;
-    particles.push({ x, y, vx: Math.cos(a)*s, vy: Math.sin(a)*s, life: 30, color });
-  }
-}
-
-function updateUI() {
-  document.getElementById('chickenCount').textContent = chickens.filter(c => c.alive).length;
-}
-
-let lastTime = 0;
-let secondTimer = 0;
-function gameLoop(ts) {
-  const dt = Math.min(ts - lastTime, 50);
-  lastTime = ts;
-
-  if (state === 'playing') {
-    update(dt);
-  }
-  draw();
-
-  if (state === 'playing') requestAnimationFrame(gameLoop);
-}
-
-function update(dt) {
-  // Timer
-  secondTimer += dt;
-  if (secondTimer >= 1000) {
-    secondTimer -= 1000;
-    if (timeLeft > 0) timeLeft--;
-  }
-
-  // Spieler bewegen
-  let dx = 0, dy = 0;
-  if (keys['w'] || keys['W'] || keys['ArrowUp']) dy -= 1;
-  if (keys['s'] || keys['S'] || keys['ArrowDown']) dy += 1;
-  if (keys['a'] || keys['A'] || keys['ArrowLeft']) dx -= 1;
-  if (keys['d'] || keys['D'] || keys['ArrowRight']) dx += 1;
-  const len = Math.hypot(dx, dy);
-  if (len > 0) { dx /= len; dy /= len; facingAngle = Math.atan2(dy, dx); }
-  player.x = Math.max(player.r, Math.min(W - player.r, player.x + dx * player.speed));
-  player.y = Math.max(player.r, Math.min(H - player.r, player.y + dy * player.speed));
-
-  if (attackCooldown > 0) attackCooldown--;
-  if (attackAnim > 0) attackAnim--;
-
-  // Hühner Logik
-  for (let c of chickens) {
-    if (!c.alive) continue;
-    c.wanderTimer--;
+    <div class="farm-bg"></div>
+    <canvas id="gameCanvas"></canvas>
     
-    if (c.wanderTimer <= 0) {
-      if (c.state === 'scared') {
-        c.state = 'wander';
-      }
-      
-      if (Math.random() < 0.2 && c.state !== 'flee') {
-        c.state = 'flee';
-        c.wanderTimer = 200 + Math.random() * 200;
-        const edge = Math.floor(Math.random() * 4);
-        let tx, ty;
-        if (edge === 0) { tx = Math.random() * W; ty = -50; }
-        else if (edge === 1) { tx = W + 50; ty = Math.random() * H; }
-        else if (edge === 2) { tx = Math.random() * W; ty = H + 50; }
-        else { tx = -50; ty = Math.random() * H; }
-        
-        const fdx = tx - c.x, fdy = ty - c.y;
-        const flen = Math.hypot(fdx, fdy);
-        c.vx = (fdx / flen) * (1.2 + Math.random() * 0.8);
-        c.vy = (fdy / flen) * (1.2 + Math.random() * 0.8);
-      } else if (c.state !== 'flee') {
-        c.state = 'wander';
-        c.vx = (Math.random() - 0.5) * 0.8;
-        c.vy = (Math.random() - 0.5) * 0.8;
-        c.wanderTimer = 80 + Math.random() * 120;
-      }
-    }
+    <div id="ui-layer">
+        <div>
+            <div class="panel">
+                <h1>Hühnerjagd 🐔</h1>
+                <p>Ein Huhn (mit dem <strong>roten Kamm</strong>) ist entwischt!</p>
+                <div class="controls-hint">
+                    <div><span class="key">Maus</span> Zielen</div>
+                    <div><span class="key">W</span> Rennen</div>
+                    <div><span class="key">Leertaste</span> Fangen</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div id="catchHint" class="catch-hint">LEERTASTE!</div>
 
-    c.x += c.vx;
-    c.y += c.vy;
+    <div id="win-screen">
+        <div class="win-box">
+            <h2>Gefangen! 🎉</h2>
+            <p>Du hast das entwischte Huhn wieder eingefangen und sicher auf dem Arm.</p>
+            <button onclick="resetGame()">Nochmal spielen</button>
+        </div>
+    </div>
 
-    if (c.x < -20 || c.x > W + 20 || c.y < -20 || c.y > H + 20) {
-      c.alive = false;
-      updateUI();
-    }
-  }
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const catchHint = document.getElementById('catchHint');
 
-  // Partikel
-  for (let p of particles) { p.x += p.vx; p.y += p.vy; p.vx *= 0.9; p.vy *= 0.9; p.life--; }
-  particles = particles.filter(p => p.life > 0);
+        let width, height;
 
-  checkWin();
-}
+        function resize() {
+            width = window.innerWidth;
+            height = window.innerHeight;
+            canvas.width = width;
+            canvas.height = height;
+        }
+        window.addEventListener('resize', resize);
+        resize();
 
-function checkWin() {
-  const aliveChickens = chickens.filter(c => c.alive).length;
+        const keys = { w: false, space: false };
+        const mouse = { x: width/2, y: height/2 };
 
-  if (aliveChickens === 0) {
-    state = 'lost';
-    overlay.style.display = 'flex';
-    overlay.innerHTML = `
-      <h1 style="color:#ff6b6b">💀 Verloren!</h1>
-      <p>Alle Hühner sind entkommen!</p>
-      <button onclick="location.reload()" style="font-size:20px;padding:12px 32px;background:#7c4a4a;color:#fff;border:none;border-radius:8px;cursor:pointer;font-family:inherit">Nochmal spielen</button>`;
-  } else if (timeLeft <= 0) {
-    state = 'won';
-    overlay.style.display = 'flex';
-    overlay.innerHTML = `
-      <h1 style="color:#7fff7f">🏆 Gewonnen!</h1>
-      <p>Du hast 60 Sekunden durchgehalten!<br>${aliveChickens} Hühner konnten gerettet werden.</p>
-      <button onclick="location.reload()" style="font-size:20px;padding:12px 32px;background:#4a7c59;color:#fff;border:none;border-radius:8px;cursor:pointer;font-family:inherit">Nochmal spielen</button>`;
-  }
-}
+        window.addEventListener('keydown', (e) => {
+            if (e.key.toLowerCase() === 'w') keys.w = true;
+            if (e.code === 'Space') {
+                keys.space = true;
+                e.preventDefault(); // Prevent scrolling
+            }
+        });
 
-// ─── Zeichnen ───────────────────────────────────────────────────────────────
+        window.addEventListener('keyup', (e) => {
+            if (e.key.toLowerCase() === 'w') keys.w = false;
+            if (e.code === 'Space') keys.space = false;
+        });
 
-function drawFarm() {
-  ctx.fillStyle = '#4a7c3f';
-  ctx.fillRect(0, 0, W, H);
+        window.addEventListener('mousemove', (e) => {
+            mouse.x = e.clientX;
+            mouse.y = e.clientY;
+        });
 
-  ctx.fillStyle = '#3d6934';
-  for (let i = 0; i < 200; i++) {
-    const gx = (i * 137.5) % W, gy = (i * 97.3) % H;
-    ctx.fillRect(gx, gy, 3, 6);
-  }
+        class Player {
+            constructor() {
+                this.x = width / 2;
+                this.y = height / 2;
+                this.radius = 22;
+                this.speed = 5.5;
+                this.angle = 0;
+                this.hasChicken = false;
+                this.catchRadius = 70;
+            }
 
-  ctx.strokeStyle = '#8B6914';
-  ctx.lineWidth = 4;
-  for (let fx = 20; fx < W; fx += 60) {
-    ctx.beginPath(); ctx.moveTo(fx, 0); ctx.lineTo(fx, 20); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(fx, H - 20); ctx.lineTo(fx, H); ctx.stroke();
-  }
-  ctx.beginPath(); ctx.moveTo(0, 18); ctx.lineTo(W, 18); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(0, H - 18); ctx.lineTo(W, H - 18); ctx.stroke();
+            update() {
+                // Calculate angle towards mouse
+                this.angle = Math.atan2(mouse.y - this.y, mouse.x - this.x);
 
-  ctx.fillStyle = '#8B2020';
-  ctx.fillRect(30, 30, 100, 80);
-  ctx.fillStyle = '#6B1010';
-  ctx.beginPath(); ctx.moveTo(25, 30); ctx.lineTo(80, 0); ctx.lineTo(135, 30); ctx.closePath(); ctx.fill();
-  ctx.fillStyle = '#5a3010';
-  ctx.fillRect(68, 75, 24, 35);
+                if (keys.w) {
+                    let currentSpeed = this.hasChicken ? this.speed * 0.7 : this.speed;
+                    this.x += Math.cos(this.angle) * currentSpeed;
+                    this.y += Math.sin(this.angle) * currentSpeed;
+                }
 
-  ctx.fillStyle = '#c8a832';
-  ctx.beginPath(); ctx.ellipse(680, 80, 45, 28, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#a88020';
-  ctx.beginPath(); ctx.ellipse(680, 86, 45, 12, 0, 0, Math.PI); ctx.fill();
+                // Boundary collision (stay within screen, accounting for fence)
+                const margin = 20 + this.radius;
+                this.x = Math.max(margin, Math.min(width - margin, this.x));
+                this.y = Math.max(margin, Math.min(height - margin, this.y));
+            }
 
-  ctx.fillStyle = '#8B6914';
-  ctx.fillRect(W/2 - 70, 4, 140, 26);
-  ctx.fillStyle = '#fff8d0';
-  ctx.font = 'bold 14px Courier New';
-  ctx.textAlign = 'center';
-  ctx.fillText('HÜHNERHOF', W/2, 22);
-}
+            draw(ctx) {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                
+                // Add running wobble
+                let wobble = 0;
+                if (keys.w) {
+                    wobble = Math.sin(Date.now() / 60) * 0.15;
+                }
+                ctx.rotate(this.angle + wobble);
 
-function drawChicken(c) {
-  if (!c.alive) return;
-  
-  ctx.fillStyle = '#f5f0e0';
-  ctx.beginPath(); ctx.ellipse(c.x, c.y, 12, 10, 0, 0, Math.PI * 2); ctx.fill();
-  
-  if (c.state === 'flee') {
-    ctx.fillStyle = '#ff3333';
-    ctx.font = 'bold 14px Courier New';
-    ctx.fillText('!', c.x, c.y - 15);
-  } else if (c.state === 'scared') {
-    ctx.fillStyle = '#33ccff';
-    ctx.font = 'bold 14px Courier New';
-    ctx.fillText('?', c.x, c.y - 15);
-  }
+                // Body (Farmer blue shirt)
+                ctx.fillStyle = '#1976D2';
+                ctx.beginPath();
+                ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = '#0D47A1';
+                ctx.lineWidth = 2.5;
+                ctx.stroke();
 
-  ctx.fillStyle = '#f5f0e0';
-  ctx.beginPath(); ctx.arc(c.x + 10, c.y - 6, 7, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#e03030';
-  ctx.beginPath(); ctx.ellipse(c.x + 12, c.y - 12, 4, 3, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#e8a020';
-  ctx.beginPath(); ctx.moveTo(c.x + 17, c.y - 6); ctx.lineTo(c.x + 21, c.y - 4); ctx.lineTo(c.x + 17, c.y - 2); ctx.closePath(); ctx.fill();
-  ctx.fillStyle = '#000';
-  ctx.beginPath(); ctx.arc(c.x + 12, c.y - 7, 1.5, 0, Math.PI * 2); ctx.fill();
-}
+                // Head/Hat
+                ctx.fillStyle = '#FFE0B2'; // Skin
+                ctx.beginPath();
+                ctx.arc(0, 0, this.radius * 0.65, 0, Math.PI * 2);
+                ctx.fill();
 
-function drawPlayer() {
-  const angle = facingAngle;
+                ctx.fillStyle = '#FFCA28'; // Straw hat
+                ctx.beginPath();
+                ctx.arc(0, 0, this.radius * 0.85, -Math.PI/2 - 0.2, Math.PI/2 + 0.2);
+                ctx.fill();
+                ctx.strokeStyle = '#FFB300';
+                ctx.stroke();
 
-  ctx.fillStyle = 'rgba(0,0,0,0.2)';
-  ctx.beginPath(); ctx.ellipse(player.x + 3, player.y + 4, player.r, player.r * 0.5, 0, 0, Math.PI * 2); ctx.fill();
+                // Hands
+                ctx.fillStyle = '#FFE0B2';
+                ctx.beginPath();
+                ctx.arc(this.radius * 0.9, 12, 7, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(this.radius * 0.9, -12, 7, 0, Math.PI * 2);
+                ctx.fill();
 
-  ctx.fillStyle = '#3d7ac8';
-  ctx.beginPath(); ctx.arc(player.x, player.y, player.r, 0, Math.PI * 2); ctx.fill();
+                if (this.hasChicken) {
+                    // Draw caught chicken in arms
+                    ctx.fillStyle = '#FFFFFF';
+                    ctx.beginPath();
+                    ctx.ellipse(this.radius * 0.8, 0, 14, 10, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.strokeStyle = '#E0E0E0';
+                    ctx.stroke();
+                    
+                    // Chicken Head
+                    ctx.beginPath();
+                    ctx.arc(this.radius * 1.3, 0, 8, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    // Beak
+                    ctx.fillStyle = '#FFCA28';
+                    ctx.beginPath();
+                    ctx.moveTo(this.radius * 1.3 + 5, -3);
+                    ctx.lineTo(this.radius * 1.3 + 12, 0);
+                    ctx.lineTo(this.radius * 1.3 + 5, 3);
+                    ctx.fill();
 
-  ctx.fillStyle = '#8B4513';
-  ctx.beginPath(); ctx.ellipse(player.x, player.y - player.r + 2, player.r + 4, 5, 0, Math.PI, Math.PI * 2); ctx.fill();
-  ctx.fillRect(player.x - 10, player.y - player.r - 10, 20, 14);
+                    // Comb
+                    ctx.fillStyle = '#F44336';
+                    ctx.beginPath();
+                    ctx.arc(this.radius * 1.3, -6, 4, 0, Math.PI * 2);
+                    ctx.arc(this.radius * 1.3 - 4, -4, 3, 0, Math.PI * 2);
+                    ctx.fill();
+                }
 
-  ctx.fillStyle = '#f5c68a';
-  ctx.beginPath(); ctx.arc(player.x, player.y - 2, 10, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#000';
-  ctx.beginPath(); ctx.arc(player.x - 3, player.y - 3, 1.5, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.arc(player.x + 3, player.y - 3, 1.5, 0, Math.PI * 2); ctx.fill();
+                ctx.restore();
+                
+                // Draw catch radius indicator if close to target and not caught
+                if (!this.hasChicken && escapedChicken && !escapedChicken.caught) {
+                    const dist = Math.hypot(this.x - escapedChicken.x, this.y - escapedChicken.y);
+                    if (dist < this.catchRadius) {
+                        ctx.save();
+                        ctx.translate(this.x, this.y);
+                        ctx.beginPath();
+                        ctx.arc(0, 0, this.catchRadius, 0, Math.PI * 2);
+                        ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+                        ctx.lineWidth = 2;
+                        ctx.setLineDash([5, 5]);
+                        ctx.stroke();
+                        ctx.restore();
+                        
+                        catchHint.style.left = (this.x + 30) + 'px';
+                        catchHint.style.top = (this.y - 30) + 'px';
+                        catchHint.classList.add('visible');
+                    } else {
+                        catchHint.classList.remove('visible');
+                    }
+                } else {
+                    catchHint.classList.remove('visible');
+                }
+            }
+        }
 
-  ctx.save();
-  ctx.translate(player.x, player.y);
-  ctx.rotate(angle + (attackAnim > 0 ? -0.6 + (attackAnim / 28) * 0.6 : 0));
-  ctx.strokeStyle = '#8B6914';
-  ctx.lineWidth = 4;
-  ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(70, 0); ctx.stroke();
-  ctx.strokeStyle = '#a0a0a0';
-  ctx.lineWidth = 3;
-  for (let zi = -1; zi <= 1; zi++) {
-    ctx.beginPath(); ctx.moveTo(65, zi * 8); ctx.lineTo(90, zi * 8); ctx.stroke();
-  }
-  ctx.restore();
+        class Chicken {
+            constructor(isEscaped = false) {
+                // Ensure they don't spawn right on top of the player
+                do {
+                    this.x = 50 + Math.random() * (width - 100);
+                    this.y = 50 + Math.random() * (height - 100);
+                } while(Math.hypot(this.x - width/2, this.y - height/2) < 200);
+                
+                this.radius = 12;
+                this.baseSpeed = isEscaped ? 4.8 : 1.5;
+                this.speed = this.baseSpeed;
+                this.angle = Math.random() * Math.PI * 2;
+                this.isEscaped = isEscaped;
+                this.caught = false;
+                
+                this.wanderTimer = 0;
+                this.targetAngle = this.angle;
+                
+                // For animation
+                this.walkCycle = Math.random() * Math.PI * 2;
+            }
 
-  if (attackCooldown === 0) {
-    ctx.save();
-    ctx.globalAlpha = 0.15;
-    ctx.fillStyle = '#ffff00';
-    ctx.beginPath();
-    ctx.moveTo(player.x, player.y);
-    ctx.arc(player.x, player.y, player.attackRange, angle - player.attackAngle/2, angle + player.attackAngle/2);
-    ctx.closePath();
-    ctx.fill();
-    ctx.restore();
-  }
-}
+            update(player) {
+                if (this.caught) return;
 
-function drawCursor() {
-  const ready = attackCooldown === 0;
-  ctx.fillStyle = ready ? 'rgba(255,255,100,0.85)' : 'rgba(100,100,100,0.6)';
-  ctx.beginPath(); ctx.roundRect(W - 110, H - 38, 100, 28, 6); ctx.fill();
-  ctx.fillStyle = ready ? '#000' : '#aaa';
-  ctx.font = 'bold 14px Courier New';
-  ctx.textAlign = 'center';
-  ctx.fillText('LEERTASTE', W - 60, H - 19);
-}
+                const dx = player.x - this.x;
+                const dy = player.y - this.y;
+                const dist = Math.sqrt(dx*dx + dy*dy);
 
-function draw() {
-  ctx.clearRect(0, 0, W, H);
+                if (this.isEscaped && dist < 250) {
+                    // Escaped chicken flees aggressively
+                    this.targetAngle = Math.atan2(-dy, -dx);
+                    // Add slight random deviation so it doesn't just run straight into corners and get stuck
+                    this.targetAngle += (Math.random() - 0.5) * 0.5;
+                    this.speed = this.baseSpeed; 
+                } else if (dist < 80 && !this.isEscaped) {
+                    // Normal chickens move away gently
+                    this.targetAngle = Math.atan2(-dy, -dx) + (Math.random() - 0.5);
+                    this.speed = this.baseSpeed * 1.5;
+                } else {
+                    // Wander
+                    this.speed = this.baseSpeed * 0.6;
+                    this.wanderTimer--;
+                    if (this.wanderTimer <= 0) {
+                        this.wanderTimer = 60 + Math.random() * 90;
+                        this.targetAngle += (Math.random() - 0.5) * Math.PI * 1.5;
+                    }
+                }
 
-  drawFarm();
+                // Smooth rotation
+                let dAngle = this.targetAngle - this.angle;
+                while (dAngle > Math.PI) dAngle -= Math.PI * 2;
+                while (dAngle < -Math.PI) dAngle += Math.PI * 2;
+                this.angle += dAngle * 0.1;
 
-  for (let c of chickens) drawChicken(c);
-  drawPlayer();
+                this.x += Math.cos(this.angle) * this.speed;
+                this.y += Math.sin(this.angle) * this.speed;
 
-  for (let p of particles) {
-    ctx.globalAlpha = p.life / 30;
-    ctx.fillStyle = p.color;
-    ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI * 2); ctx.fill();
-  }
-  ctx.globalAlpha = 1;
+                // Animate walk cycle based on speed
+                this.walkCycle += this.speed * 0.15;
 
-  drawCursor();
+                // Boundaries
+                const margin = 20 + this.radius;
+                if (this.x < margin || this.x > width - margin) {
+                    this.targetAngle = Math.PI - this.targetAngle;
+                    this.x = Math.max(margin, Math.min(width - margin, this.x));
+                }
+                if (this.y < margin || this.y > height - margin) {
+                    this.targetAngle = -this.targetAngle;
+                    this.y = Math.max(margin, Math.min(height - margin, this.y));
+                }
+            }
 
-  const bw = 200;
-  ctx.fillStyle = 'rgba(0,0,0,0.4)';
-  ctx.fillRect(10, 10, bw, 20);
-  ctx.fillStyle = timeLeft > 10 ? '#4a7c59' : '#e74c3c';
-  ctx.fillRect(10, 10, bw * (timeLeft / GAME_DURATION), 20);
-  ctx.fillStyle = '#fff';
-  ctx.font = 'bold 14px Courier New';
-  ctx.textAlign = 'center';
-  ctx.fillText(`Zeit: ${timeLeft}s`, 10 + bw/2, 25);
-}
-</script>
+            draw(ctx) {
+                if (this.caught) return;
+
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                
+                let wobble = Math.sin(this.walkCycle) * 0.1;
+                ctx.rotate(this.angle + wobble);
+
+                // Chicken body
+                ctx.fillStyle = '#FAFAFA';
+                ctx.beginPath();
+                ctx.ellipse(0, 0, this.radius, this.radius * 0.75, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = '#E0E0E0';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+
+                // Wings
+                ctx.fillStyle = '#F5F5F5';
+                let wingFlap = Math.abs(Math.sin(this.walkCycle)) * 3;
+                ctx.beginPath();
+                ctx.ellipse(0, this.radius * 0.6 + wingFlap/2, this.radius * 0.6, this.radius * 0.3, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.ellipse(0, -this.radius * 0.6 - wingFlap/2, this.radius * 0.6, this.radius * 0.3, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+
+                // Head
+                ctx.beginPath();
+                ctx.arc(this.radius * 0.6, 0, this.radius * 0.55, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Beak
+                ctx.fillStyle = '#FFCA28';
+                ctx.beginPath();
+                ctx.moveTo(this.radius * 1.1, -4);
+                ctx.lineTo(this.radius * 1.6, 0);
+                ctx.lineTo(this.radius * 1.1, 4);
+                ctx.fill();
+
+                // Comb
+                if (this.isEscaped) {
+                    ctx.fillStyle = '#D32F2F'; // Distinct Red
+                    ctx.beginPath();
+                    ctx.arc(this.radius * 0.5, -this.radius * 0.5, 4.5, 0, Math.PI * 2);
+                    ctx.arc(this.radius * 0.8, -this.radius * 0.4, 3.5, 0, Math.PI * 2);
+                    ctx.fill();
+                } else {
+                    ctx.fillStyle = '#FF8A80'; // Pale red
+                    ctx.beginPath();
+                    ctx.arc(this.radius * 0.6, -this.radius * 0.4, 2.5, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+
+                ctx.restore();
+            }
+        }
+
+        let player;
+        let chickens = [];
+        let escapedChicken;
+        let gameWon = false;
+
+        function initGame() {
+            player = new Player();
+            chickens = [];
+            for(let i=0; i<20; i++) {
+                chickens.push(new Chicken(false));
+            }
+            escapedChicken = new Chicken(true);
+            chickens.push(escapedChicken);
+            
+            gameWon = false;
+            document.getElementById('win-screen').classList.remove('visible');
+            catchHint.classList.remove('visible');
+        }
+
+        window.resetGame = function() {
+            initGame();
+        };
+
+        let lastSpacePressed = false;
+
+        // Add some basic grass details for the background
+        const grassPatches = [];
+        for(let i=0; i<100; i++) {
+            grassPatches.push({
+                x: Math.random(),
+                y: Math.random(),
+                size: 2 + Math.random() * 3
+            });
+        }
+
+        function drawBackground() {
+            // Draw fence
+            ctx.strokeStyle = '#5D4037';
+            ctx.lineWidth = 12;
+            ctx.strokeRect(6, 6, width - 12, height - 12);
+            
+            // Inner fence detail
+            ctx.strokeStyle = '#8D6E63';
+            ctx.lineWidth = 4;
+            ctx.strokeRect(12, 12, width - 24, height - 24);
+
+            // Draw grass patches
+            ctx.fillStyle = '#689F38';
+            grassPatches.forEach(p => {
+                ctx.beginPath();
+                ctx.arc(p.x * width, p.y * height, p.size, 0, Math.PI * 2);
+                ctx.fill();
+            });
+        }
+
+        function gameLoop() {
+            if (!gameWon) {
+                player.update();
+                chickens.forEach(c => c.update(player));
+
+                // Catch logic
+                if (keys.space && !lastSpacePressed) {
+                    const dx = player.x - escapedChicken.x;
+                    const dy = player.y - escapedChicken.y;
+                    const dist = Math.sqrt(dx*dx + dy*dy);
+                    
+                    if (dist < player.catchRadius) {
+                        escapedChicken.caught = true;
+                        player.hasChicken = true;
+                        gameWon = true;
+                        catchHint.classList.remove('visible');
+                        
+                        // Add small win animation
+                        setTimeout(() => {
+                            document.getElementById('win-screen').classList.add('visible');
+                        }, 800);
+                    }
+                }
+            } else {
+                player.update();
+                chickens.forEach(c => c.update(player));
+            }
+            
+            lastSpacePressed = keys.space;
+
+            ctx.clearRect(0, 0, width, height);
+            drawBackground();
+
+            // Draw all chickens except the caught one
+            chickens.forEach(c => {
+                if(c !== escapedChicken || !c.caught) c.draw(ctx);
+            });
+            
+            player.draw(ctx);
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        initGame();
+        gameLoop();
+    </script>
 </body>
 </html>
