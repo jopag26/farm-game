@@ -18,14 +18,12 @@
 </head>
 <body>
 <div id="ui">
-  <span>Runde: <b id="roundNum">1</b></span>
-  <span>Gegner: <b id="enemyCount">10</b>/10</span>
-  <span>Hühner: <b id="chickenCount">5</b></span>
+  <span>Hühner: <b id="chickenCount">12</b></span>
 </div>
 <canvas id="canvas" width="800" height="560"></canvas>
 <div id="overlay">
   <h1>🌾 Hühnerhof-Verteidiger</h1>
-  <p>Verteidige deine Hühner! Halte die Monster mit deiner Heugabel fern.<br><br>WASD / Pfeiltasten = Bewegen<br>Leertaste = Angriff (in Bewegungsrichtung)</p>
+  <p>Halte die Hühner auf dem Hof! Erschrecke sie mit deiner Heugabel, damit sie nicht weglaufen.<br><br>WASD / Pfeiltasten = Bewegen<br>Leertaste = Heugabel schwingen</p>
   <button id="startBtn">Spiel starten</button>
 </div>
 
@@ -37,14 +35,14 @@ const startBtn = document.getElementById('startBtn');
 
 const W = canvas.width, H = canvas.height;
 
-const TOTAL_ENEMIES = 10;
-const SPAWN_INTERVAL = 1400;
 const CHICKEN_COUNT = 12;
+const GAME_DURATION = 60; // 60 seconds
 
 let state = 'menu';
-let player, enemies, chickens, particles, attackCooldown, spawnTimer, spawnedCount, attackAnim;
+let player, chickens, particles, attackCooldown, attackAnim;
 let facingAngle = 0;
 let keys = {};
+let timeLeft = 0;
 
 window.addEventListener('keydown', e => {
   keys[e.key] = true;
@@ -57,15 +55,13 @@ startBtn.addEventListener('click', startGame);
 function startGame() {
   overlay.style.display = 'none';
   state = 'playing';
+  timeLeft = GAME_DURATION;
 
   player = { x: W/2, y: H/2, r: 18, speed: 5.0, hp: 100, maxHp: 100, attackRange: 95, attackAngle: Math.PI * 0.7 };
   facingAngle = 0;
-  enemies = [];
   particles = [];
   attackCooldown = 0;
   attackAnim = 0;
-  spawnedCount = 0;
-  spawnTimer = 0;
 
   chickens = [];
   for (let i = 0; i < CHICKEN_COUNT; i++) {
@@ -76,6 +72,7 @@ function startGame() {
       vx: (Math.random() - 0.5) * 0.6,
       vy: (Math.random() - 0.5) * 0.6,
       wanderTimer: Math.random() * 120,
+      state: 'wander', // wander or flee or scared
       alive: true
     });
   }
@@ -90,21 +87,24 @@ function tryAttack() {
   attackAnim = 28;
 
   const angle = facingAngle;
-  for (let e of enemies) {
-    if (!e.alive) continue;
-    const dx = e.x - player.x, dy = e.y - player.y;
+  for (let c of chickens) {
+    if (!c.alive) continue;
+    const dx = c.x - player.x, dy = c.y - player.y;
     const dist = Math.hypot(dx, dy);
     if (dist > player.attackRange) continue;
     const eAngle = Math.atan2(dy, dx);
     let diff = Math.abs(angle - eAngle);
     if (diff > Math.PI) diff = 2 * Math.PI - diff;
     if (diff < player.attackAngle / 2) {
-      e.hp -= 50;
-      spawnHitParticles(e.x, e.y, '#ff6b35');
-      if (e.hp <= 0) { e.alive = false; spawnHitParticles(e.x, e.y, '#ff0000'); }
+      // Scare the chicken away from the player
+      c.state = 'scared';
+      c.wanderTimer = 60; // Run away for 60 frames
+      const pushAngle = Math.atan2(dy, dx);
+      c.vx = Math.cos(pushAngle) * 3.5;
+      c.vy = Math.sin(pushAngle) * 3.5;
+      spawnHitParticles(c.x, c.y, '#ffffff');
     }
   }
-  updateUI();
 }
 
 function spawnHitParticles(x, y, color) {
@@ -115,46 +115,32 @@ function spawnHitParticles(x, y, color) {
   }
 }
 
-function spawnEnemy() {
-  const side = Math.floor(Math.random() * 4);
-  let x, y;
-  if (side === 0) { x = Math.random() * W; y = -20; }
-  else if (side === 1) { x = W + 20; y = Math.random() * H; }
-  else if (side === 2) { x = Math.random() * W; y = H + 20; }
-  else { x = -20; y = Math.random() * H; }
-
-  const type = spawnedCount > 10 ? (Math.random() < 0.4 ? 'fast' : 'normal') : 'normal';
-  enemies.push({
-    x, y, r: type === 'fast' ? 12 : 16,
-    hp: type === 'fast' ? 50 : 100,
-    maxHp: type === 'fast' ? 50 : 100,
-    speed: type === 'fast' ? 3.2 : 2.0,
-    alive: true,
-    type,
-    target: null,
-    carryTimer: 0
-  });
-  spawnedCount++;
-  updateUI();
-}
-
 function updateUI() {
-  document.getElementById('enemyCount').textContent = TOTAL_ENEMIES - enemies.filter(e => e.alive).length;
   document.getElementById('chickenCount').textContent = chickens.filter(c => c.alive).length;
 }
 
 let lastTime = 0;
+let secondTimer = 0;
 function gameLoop(ts) {
   const dt = Math.min(ts - lastTime, 50);
   lastTime = ts;
 
-  update(dt);
+  if (state === 'playing') {
+    update(dt);
+  }
   draw();
 
   if (state === 'playing') requestAnimationFrame(gameLoop);
 }
 
 function update(dt) {
+  // Timer
+  secondTimer += dt;
+  if (secondTimer >= 1000) {
+    secondTimer -= 1000;
+    if (timeLeft > 0) timeLeft--;
+  }
+
   // Spieler bewegen
   let dx = 0, dy = 0;
   if (keys['w'] || keys['W'] || keys['ArrowUp']) dy -= 1;
@@ -169,75 +155,44 @@ function update(dt) {
   if (attackCooldown > 0) attackCooldown--;
   if (attackAnim > 0) attackAnim--;
 
-  // Hühner wandern
+  // Hühner Logik
   for (let c of chickens) {
     if (!c.alive) continue;
     c.wanderTimer--;
+    
     if (c.wanderTimer <= 0) {
-      c.vx = (Math.random() - 0.5) * 0.8;
-      c.vy = (Math.random() - 0.5) * 0.8;
-      c.wanderTimer = 80 + Math.random() * 120;
-    }
-    c.x = Math.max(40, Math.min(W - 40, c.x + c.vx));
-    c.y = Math.max(40, Math.min(H - 40, c.y + c.vy));
-  }
-
-  // Spawn
-  spawnTimer += dt;
-  if (spawnedCount < TOTAL_ENEMIES && spawnTimer > SPAWN_INTERVAL) {
-    spawnTimer = 0;
-    spawnEnemy();
-  }
-
-  // Gegner KI
-  for (let e of enemies) {
-    if (!e.alive) continue;
-
-    // Ziel: nächstes lebendiges Huhn
-    let closest = null, minDist = Infinity;
-    for (let c of chickens) {
-      if (!c.alive) continue;
-      const d = Math.hypot(c.x - e.x, c.y - e.y);
-      if (d < minDist) { minDist = d; closest = c; }
-    }
-
-    if (!closest) {
-      // Alle Hühner weg → zum Spieler
-      const ddx = player.x - e.x, ddy = player.y - e.y;
-      const dd = Math.hypot(ddx, ddy);
-      if (dd > 1) { e.x += (ddx/dd) * e.speed; e.y += (ddy/dd) * e.speed; }
-      continue;
-    }
-
-    e.target = closest;
-    const ex = closest.x - e.x, ey = closest.y - e.y;
-    const ed = Math.hypot(ex, ey);
-
-    if (ed < e.r + closest.r + 2) {
-      // Huhn klauen
-      e.carryTimer++;
-      if (e.carryTimer > 90) {
-        closest.alive = false;
-        // Raus mit dem Huhn
-        const side = Math.floor(Math.random() * 4);
-        e.escapeX = side === 0 ? closest.x : side === 1 ? W + 50 : side === 2 ? closest.x : -50;
-        e.escapeY = side === 0 ? -50 : side === 1 ? closest.y : side === 2 ? H + 50 : closest.y;
-        e.escaping = true;
-        e.carryChicken = true;
-        updateUI();
+      if (c.state === 'scared') {
+        c.state = 'wander';
       }
-    } else {
-      e.carryTimer = 0;
-      e.x += (ex/ed) * e.speed;
-      e.y += (ey/ed) * e.speed;
+      
+      if (Math.random() < 0.2 && c.state !== 'flee') {
+        c.state = 'flee';
+        c.wanderTimer = 200 + Math.random() * 200;
+        const edge = Math.floor(Math.random() * 4);
+        let tx, ty;
+        if (edge === 0) { tx = Math.random() * W; ty = -50; }
+        else if (edge === 1) { tx = W + 50; ty = Math.random() * H; }
+        else if (edge === 2) { tx = Math.random() * W; ty = H + 50; }
+        else { tx = -50; ty = Math.random() * H; }
+        
+        const fdx = tx - c.x, fdy = ty - c.y;
+        const flen = Math.hypot(fdx, fdy);
+        c.vx = (fdx / flen) * (1.2 + Math.random() * 0.8);
+        c.vy = (fdy / flen) * (1.2 + Math.random() * 0.8);
+      } else if (c.state !== 'flee') {
+        c.state = 'wander';
+        c.vx = (Math.random() - 0.5) * 0.8;
+        c.vy = (Math.random() - 0.5) * 0.8;
+        c.wanderTimer = 80 + Math.random() * 120;
+      }
     }
 
-    if (e.escaping) {
-      const ex2 = e.escapeX - e.x, ey2 = e.escapeY - e.y;
-      const ed2 = Math.hypot(ex2, ey2);
-      if (ed2 < 5) { e.alive = false; updateUI(); continue; }
-      e.x += (ex2/ed2) * (e.speed * 1.5);
-      e.y += (ey2/ed2) * (e.speed * 1.5);
+    c.x += c.vx;
+    c.y += c.vy;
+
+    if (c.x < -20 || c.x > W + 20 || c.y < -20 || c.y > H + 20) {
+      c.alive = false;
+      updateUI();
     }
   }
 
@@ -249,42 +204,37 @@ function update(dt) {
 }
 
 function checkWin() {
-  const aliveEnemies = enemies.filter(e => e.alive).length;
-  const allSpawned = spawnedCount >= TOTAL_ENEMIES;
   const aliveChickens = chickens.filter(c => c.alive).length;
 
-  if (allSpawned && aliveEnemies === 0) {
-    state = 'won';
-    overlay.style.display = 'flex';
-    overlay.innerHTML = `
-      <h1 style="color:#7fff7f">🏆 Gewonnen!</h1>
-      <p>Du hast alle 10 Monster besiegt!<br>${aliveChickens} Hühner sind noch am Leben.</p>
-      <button id="startBtn" onclick="location.reload()" style="font-size:20px;padding:12px 32px;background:#4a7c59;color:#fff;border:none;border-radius:8px;cursor:pointer;font-family:inherit">Nochmal spielen</button>`;
-  } else if (aliveChickens === 0) {
+  if (aliveChickens === 0) {
     state = 'lost';
     overlay.style.display = 'flex';
     overlay.innerHTML = `
       <h1 style="color:#ff6b6b">💀 Verloren!</h1>
-      <p>Alle Hühner wurden gestohlen!</p>
+      <p>Alle Hühner sind entkommen!</p>
       <button onclick="location.reload()" style="font-size:20px;padding:12px 32px;background:#7c4a4a;color:#fff;border:none;border-radius:8px;cursor:pointer;font-family:inherit">Nochmal spielen</button>`;
+  } else if (timeLeft <= 0) {
+    state = 'won';
+    overlay.style.display = 'flex';
+    overlay.innerHTML = `
+      <h1 style="color:#7fff7f">🏆 Gewonnen!</h1>
+      <p>Du hast 60 Sekunden durchgehalten!<br>${aliveChickens} Hühner konnten gerettet werden.</p>
+      <button onclick="location.reload()" style="font-size:20px;padding:12px 32px;background:#4a7c59;color:#fff;border:none;border-radius:8px;cursor:pointer;font-family:inherit">Nochmal spielen</button>`;
   }
 }
 
 // ─── Zeichnen ───────────────────────────────────────────────────────────────
 
 function drawFarm() {
-  // Wiese
   ctx.fillStyle = '#4a7c3f';
   ctx.fillRect(0, 0, W, H);
 
-  // Gras-Textur (Punkte)
   ctx.fillStyle = '#3d6934';
   for (let i = 0; i < 200; i++) {
     const gx = (i * 137.5) % W, gy = (i * 97.3) % H;
     ctx.fillRect(gx, gy, 3, 6);
   }
 
-  // Zaun oben/unten
   ctx.strokeStyle = '#8B6914';
   ctx.lineWidth = 4;
   for (let fx = 20; fx < W; fx += 60) {
@@ -294,7 +244,6 @@ function drawFarm() {
   ctx.beginPath(); ctx.moveTo(0, 18); ctx.lineTo(W, 18); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(0, H - 18); ctx.lineTo(W, H - 18); ctx.stroke();
 
-  // Scheune
   ctx.fillStyle = '#8B2020';
   ctx.fillRect(30, 30, 100, 80);
   ctx.fillStyle = '#6B1010';
@@ -302,13 +251,11 @@ function drawFarm() {
   ctx.fillStyle = '#5a3010';
   ctx.fillRect(68, 75, 24, 35);
 
-  // Heuhaufen
   ctx.fillStyle = '#c8a832';
   ctx.beginPath(); ctx.ellipse(680, 80, 45, 28, 0, 0, Math.PI * 2); ctx.fill();
   ctx.fillStyle = '#a88020';
   ctx.beginPath(); ctx.ellipse(680, 86, 45, 12, 0, 0, Math.PI); ctx.fill();
 
-  // Schild
   ctx.fillStyle = '#8B6914';
   ctx.fillRect(W/2 - 70, 4, 140, 26);
   ctx.fillStyle = '#fff8d0';
@@ -319,90 +266,55 @@ function drawFarm() {
 
 function drawChicken(c) {
   if (!c.alive) return;
-  // Körper
+  
   ctx.fillStyle = '#f5f0e0';
   ctx.beginPath(); ctx.ellipse(c.x, c.y, 12, 10, 0, 0, Math.PI * 2); ctx.fill();
-  // Kopf
-  ctx.fillStyle = '#f5f0e0';
-  ctx.beginPath(); ctx.arc(c.x + 10, c.y - 6, 7, 0, Math.PI * 2); ctx.fill();
-  // Kamm
-  ctx.fillStyle = '#e03030';
-  ctx.beginPath(); ctx.ellipse(c.x + 12, c.y - 12, 4, 3, 0, 0, Math.PI * 2); ctx.fill();
-  // Schnabel
-  ctx.fillStyle = '#e8a020';
-  ctx.beginPath(); ctx.moveTo(c.x + 17, c.y - 6); ctx.lineTo(c.x + 21, c.y - 4); ctx.lineTo(c.x + 17, c.y - 2); ctx.closePath(); ctx.fill();
-  // Auge
-  ctx.fillStyle = '#000';
-  ctx.beginPath(); ctx.arc(c.x + 12, c.y - 7, 1.5, 0, Math.PI * 2); ctx.fill();
-}
-
-function drawEnemy(e) {
-  if (!e.alive) return;
-  const color = e.type === 'fast' ? '#9b30e0' : '#c0392b';
-  const darkColor = e.type === 'fast' ? '#7020a0' : '#922b21';
-
-  // Körper
-  ctx.fillStyle = color;
-  ctx.beginPath(); ctx.arc(e.x, e.y, e.r, 0, Math.PI * 2); ctx.fill();
-
-  // Augen
-  ctx.fillStyle = '#fff';
-  ctx.beginPath(); ctx.arc(e.x - 4, e.y - 3, 4, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.arc(e.x + 4, e.y - 3, 4, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#000';
-  ctx.beginPath(); ctx.arc(e.x - 4, e.y - 3, 2, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.arc(e.x + 4, e.y - 3, 2, 0, Math.PI * 2); ctx.fill();
-
-  // Zähne
-  ctx.fillStyle = '#fff';
-  ctx.beginPath(); ctx.moveTo(e.x - 5, e.y + 3); ctx.lineTo(e.x - 2, e.y + 7); ctx.lineTo(e.x + 1, e.y + 3); ctx.lineTo(e.x + 4, e.y + 7); ctx.lineTo(e.x + 7, e.y + 3); ctx.stroke();
-
-  // Huhn tragen
-  if (e.carryChicken) {
-    ctx.fillStyle = '#f5f0e0';
-    ctx.beginPath(); ctx.ellipse(e.x, e.y - e.r - 8, 8, 6, 0, 0, Math.PI * 2); ctx.fill();
+  
+  if (c.state === 'flee') {
+    ctx.fillStyle = '#ff3333';
+    ctx.font = 'bold 14px Courier New';
+    ctx.fillText('!', c.x, c.y - 15);
+  } else if (c.state === 'scared') {
+    ctx.fillStyle = '#33ccff';
+    ctx.font = 'bold 14px Courier New';
+    ctx.fillText('?', c.x, c.y - 15);
   }
 
-  // HP-Balken
-  const bw = e.r * 2.5;
-  ctx.fillStyle = '#300';
-  ctx.fillRect(e.x - bw/2, e.y - e.r - 10, bw, 5);
-  ctx.fillStyle = '#e74c3c';
-  ctx.fillRect(e.x - bw/2, e.y - e.r - 10, bw * (e.hp / e.maxHp), 5);
+  ctx.fillStyle = '#f5f0e0';
+  ctx.beginPath(); ctx.arc(c.x + 10, c.y - 6, 7, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#e03030';
+  ctx.beginPath(); ctx.ellipse(c.x + 12, c.y - 12, 4, 3, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#e8a020';
+  ctx.beginPath(); ctx.moveTo(c.x + 17, c.y - 6); ctx.lineTo(c.x + 21, c.y - 4); ctx.lineTo(c.x + 17, c.y - 2); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#000';
+  ctx.beginPath(); ctx.arc(c.x + 12, c.y - 7, 1.5, 0, Math.PI * 2); ctx.fill();
 }
 
 function drawPlayer() {
   const angle = facingAngle;
 
-  // Schatten
   ctx.fillStyle = 'rgba(0,0,0,0.2)';
   ctx.beginPath(); ctx.ellipse(player.x + 3, player.y + 4, player.r, player.r * 0.5, 0, 0, Math.PI * 2); ctx.fill();
 
-  // Körper (Bauer)
   ctx.fillStyle = '#3d7ac8';
   ctx.beginPath(); ctx.arc(player.x, player.y, player.r, 0, Math.PI * 2); ctx.fill();
 
-  // Hut
   ctx.fillStyle = '#8B4513';
   ctx.beginPath(); ctx.ellipse(player.x, player.y - player.r + 2, player.r + 4, 5, 0, Math.PI, Math.PI * 2); ctx.fill();
   ctx.fillRect(player.x - 10, player.y - player.r - 10, 20, 14);
 
-  // Gesicht
   ctx.fillStyle = '#f5c68a';
   ctx.beginPath(); ctx.arc(player.x, player.y - 2, 10, 0, Math.PI * 2); ctx.fill();
   ctx.fillStyle = '#000';
   ctx.beginPath(); ctx.arc(player.x - 3, player.y - 3, 1.5, 0, Math.PI * 2); ctx.fill();
   ctx.beginPath(); ctx.arc(player.x + 3, player.y - 3, 1.5, 0, Math.PI * 2); ctx.fill();
 
-  // Heugabel
   ctx.save();
   ctx.translate(player.x, player.y);
   ctx.rotate(angle + (attackAnim > 0 ? -0.6 + (attackAnim / 28) * 0.6 : 0));
-  // Stiel
   ctx.strokeStyle = '#8B6914';
   ctx.lineWidth = 4;
   ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(70, 0); ctx.stroke();
-  // Zinken
   ctx.strokeStyle = '#a0a0a0';
   ctx.lineWidth = 3;
   for (let zi = -1; zi <= 1; zi++) {
@@ -410,7 +322,6 @@ function drawPlayer() {
   }
   ctx.restore();
 
-  // Angriffs-Indikator (Bogen)
   if (attackCooldown === 0) {
     ctx.save();
     ctx.globalAlpha = 0.15;
@@ -425,7 +336,6 @@ function drawPlayer() {
 }
 
 function drawCursor() {
-  // Leertaste-Anzeige unten rechts
   const ready = attackCooldown === 0;
   ctx.fillStyle = ready ? 'rgba(255,255,100,0.85)' : 'rgba(100,100,100,0.6)';
   ctx.beginPath(); ctx.roundRect(W - 110, H - 38, 100, 28, 6); ctx.fill();
@@ -441,10 +351,8 @@ function draw() {
   drawFarm();
 
   for (let c of chickens) drawChicken(c);
-  for (let e of enemies) drawEnemy(e);
   drawPlayer();
 
-  // Partikel
   for (let p of particles) {
     ctx.globalAlpha = p.life / 30;
     ctx.fillStyle = p.color;
@@ -454,17 +362,15 @@ function draw() {
 
   drawCursor();
 
-  // Gegner-Zähler Balken oben links
-  const remaining = enemies.filter(e => e.alive).length + (TOTAL_ENEMIES - spawnedCount);
   const bw = 200;
   ctx.fillStyle = 'rgba(0,0,0,0.4)';
-  ctx.fillRect(10, H - 28, bw, 16);
-  ctx.fillStyle = '#e74c3c';
-  ctx.fillRect(10, H - 28, bw * (remaining / TOTAL_ENEMIES), 16);
+  ctx.fillRect(10, 10, bw, 20);
+  ctx.fillStyle = timeLeft > 10 ? '#4a7c59' : '#e74c3c';
+  ctx.fillRect(10, 10, bw * (timeLeft / GAME_DURATION), 20);
   ctx.fillStyle = '#fff';
-  ctx.font = '12px Courier New';
-  ctx.textAlign = 'left';
-  ctx.fillText(`Gegner verbleibend: ${remaining}`, 14, H - 16);
+  ctx.font = 'bold 14px Courier New';
+  ctx.textAlign = 'center';
+  ctx.fillText(`Zeit: ${timeLeft}s`, 10 + bw/2, 25);
 }
 </script>
 </body>
