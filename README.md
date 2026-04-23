@@ -1,2 +1,2 @@
 # farm-game
-The farm game
+Das Bauernhof-Spiel
