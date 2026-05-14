@@ -56,6 +56,13 @@
       display: inline-block;
       backdrop-filter: blur(5px);
       border: 2px solid rgba(255, 255, 255, 0.5);
+      transition: opacity 0.6s ease;
+      cursor: pointer;
+    }
+
+    .panel.hidden {
+      opacity: 0;
+      pointer-events: none;
     }
 
     h1 {
@@ -263,7 +270,7 @@
   <div id="start-screen">
     <div class="start-box">
       <h2>Hühnerjagd 🐔</h2>
-      <p>Fange das entwischte Huhn und sammle alle 15 Münzen ein!</p>
+      <p>Fange das rote Huhn, bring es ins Gehege und sammle alle 15 Münzen ein!</p>
       <div class="mode-buttons">
         <button class="mode-btn" onclick="startGame(1)">🧑 Einzelspieler</button>
         <button class="mode-btn p2" onclick="startGame(2)">👥 Zweispieler</button>
@@ -276,11 +283,12 @@
 
   <div id="ui-layer">
     <div>
-      <div class="panel" id="info-panel" style="display:none;">
+      <div class="panel" id="info-panel" style="display:none;" onclick="hideInfoPanel()">
         <h1>Hühnerjagd 🐔</h1>
-        <p>Ein Huhn (mit dem <strong>roten Kamm</strong>) ist entwischt!</p>
-        <p>Sammle alle 15 Münzen ein! 🪙</p>
+        <p>Fange das Huhn (<strong>roter Kamm</strong>) und bring es ins <strong>Gehege</strong>!</p>
+        <p>Sammle dabei alle 15 Münzen ein! 🪙</p>
         <div class="controls-hint" id="controls-hint"></div>
+        <p style="font-size:12px; color:#999; margin-top:10px;">Klicken zum Schließen</p>
       </div>
     </div>
   </div>
@@ -640,6 +648,9 @@
     let chickenCaught = false;
     let coinsCollected = 0;
 
+    // Gehege: wird in initGame() gesetzt, da width/height erst dann bekannt
+    let pen = { x: 0, y: 0, w: 120, h: 100 };
+
     function spawnCoins() {
       coins = [];
       for (let i = 0; i < TOTAL_COINS; i++) {
@@ -666,6 +677,10 @@
       escapedChicken = new Chicken(true);
       chickens.push(escapedChicken);
 
+      // Gehege unten rechts
+      pen.x = width - 180;
+      pen.y = height - 160;
+
       spawnCoins();
       coinsCollected = 0;
       chickenCaught = false;
@@ -690,9 +705,20 @@
       } else {
         hint.innerHTML = '<div><span class="key">WASD</span> Spieler 1</div><div><span class="key">Pfeile</span> Spieler 2</div>';
       }
-      document.getElementById('info-panel').style.display = 'inline-block';
+      const panel = document.getElementById('info-panel');
+      panel.style.display = 'inline-block';
+      panel.classList.remove('hidden');
+
+      // Nach 4 Sekunden automatisch ausblenden
+      clearTimeout(window._panelTimer);
+      window._panelTimer = setTimeout(hideInfoPanel, 4000);
 
       initGame();
+    };
+
+    window.hideInfoPanel = function() {
+      clearTimeout(window._panelTimer);
+      document.getElementById('info-panel').classList.add('hidden');
     };
 
     window.backToMenu = function() {
@@ -728,29 +754,81 @@
         ctx.arc(p.x * width, p.y * height, p.size, 0, Math.PI * 2);
         ctx.fill();
       });
+
+      drawPen();
     }
 
-    function checkWin() {
-      if (chickenCaught && coinsCollected >= TOTAL_COINS) {
-        gameWon = true;
-        const winTitle = document.getElementById('win-title');
-        const winText = document.getElementById('win-text');
+    function drawPen() {
+      const { x, y, w, h } = pen;
 
-        if (gameMode === 1) {
-          winTitle.innerText = 'Gewonnen! 🎉';
-          winText.innerText = `Du hast das Huhn gefangen und alle ${TOTAL_COINS} Münzen gesammelt!`;
-        } else {
-          const catcherName = players.find(p => p.hasChicken)?.id;
-          winTitle.innerText = `Spieler ${catcherName} gewinnt! 🎉`;
-          const p1coins = players[0].coins;
-          const p2coins = players[1].coins;
-          winText.innerText = `Huhn gefangen & alle Münzen gesammelt!\nSpieler 1: ${p1coins} 🪙  |  Spieler 2: ${p2coins} 🪙`;
-        }
+      // Boden des Geheges
+      ctx.fillStyle = '#D7CCC8';
+      ctx.fillRect(x, y, w, h);
 
-        setTimeout(() => {
-          document.getElementById('win-screen').classList.add('visible');
-        }, 800);
+      // Glühen wenn Huhn getragen wird
+      if (chickenCaught && !gameWon) {
+        ctx.save();
+        ctx.shadowColor = '#FFD700';
+        ctx.shadowBlur = 20;
+        ctx.strokeStyle = '#FFD700';
+        ctx.lineWidth = 4;
+        ctx.strokeRect(x, y, w, h);
+        ctx.restore();
       }
+
+      // Zaun-Pfosten und Latten
+      ctx.strokeStyle = '#5D4037';
+      ctx.lineWidth = 5;
+      ctx.strokeRect(x, y, w, h);
+
+      // Pfosten
+      const postColor = '#4E342E';
+      ctx.fillStyle = postColor;
+      const posts = [
+        [x, y], [x + w / 2, y], [x + w, y],
+        [x, y + h], [x + w / 2, y + h], [x + w, y + h],
+        [x, y + h / 2], [x + w, y + h / 2]
+      ];
+      posts.forEach(([px, py]) => {
+        ctx.fillRect(px - 4, py - 4, 8, 8);
+      });
+
+      // Horizontale Latten
+      ctx.strokeStyle = '#6D4C41';
+      ctx.lineWidth = 2;
+      [y + h * 0.33, y + h * 0.66].forEach(ly => {
+        ctx.beginPath();
+        ctx.moveTo(x, ly);
+        ctx.lineTo(x + w, ly);
+        ctx.stroke();
+      });
+
+      // Beschriftung
+      ctx.fillStyle = chickenCaught ? '#F57F17' : '#5D4037';
+      ctx.font = 'bold 13px Segoe UI';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('🐔 Gehege', x + w / 2, y + h / 2);
+    }
+
+    function triggerWin(winner) {
+      gameWon = true;
+      const winTitle = document.getElementById('win-title');
+      const winText = document.getElementById('win-text');
+
+      if (gameMode === 1) {
+        winTitle.innerText = 'Gewonnen! 🎉';
+        winText.innerText = `Du hast das Huhn ins Gehege gebracht und ${coinsCollected} von ${TOTAL_COINS} Münzen gesammelt!`;
+      } else {
+        winTitle.innerText = `Spieler ${winner.id} gewinnt! 🎉`;
+        const p1coins = players[0].coins;
+        const p2coins = players[1].coins;
+        winText.innerText = `Huhn sicher im Gehege!\nSpieler 1: ${p1coins} 🪙  |  Spieler 2: ${p2coins} 🪙`;
+      }
+
+      setTimeout(() => {
+        document.getElementById('win-screen').classList.add('visible');
+      }, 600);
     }
 
     function gameLoop() {
@@ -783,12 +861,12 @@
           }
         }
 
-        // Huhn fangen
+        // Huhn fangen (berühren)
         if (!chickenCaught) {
           for (let p of players) {
             const dx = p.x - escapedChicken.x;
             const dy = p.y - escapedChicken.y;
-            if (Math.sqrt(dx * dx + dy * dy) < 40) {
+            if (Math.sqrt(dx * dx + dy * dy) < p.radius + escapedChicken.radius + 8) {
               escapedChicken.caught = true;
               p.hasChicken = true;
               chickenCaught = true;
@@ -797,7 +875,17 @@
           }
         }
 
-        checkWin();
+        // Huhn ins Gehege bringen → Sieg
+        if (chickenCaught && !gameWon) {
+          for (let p of players) {
+            if (p.hasChicken) {
+              if (p.x >= pen.x && p.x <= pen.x + pen.w &&
+                  p.y >= pen.y && p.y <= pen.y + pen.h) {
+                triggerWin(p);
+              }
+            }
+          }
+        }
       }
 
       coins.forEach(c => c.draw(ctx));
