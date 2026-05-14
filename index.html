@@ -647,6 +647,9 @@
     let gameMode = 0; // 1 = Einzelspieler, 2 = Zweispieler
     let chickenCaught = false;
     let coinsCollected = 0;
+    let chickenFreeUntil = 0; // Timestamp bis wann das Huhn ungreifbar ist
+    let gameStartTime = 0;    // Timestamp Spielstart (Zweispieler)
+    const GAME_DURATION = 60; // Sekunden
 
     // Gehege: wird in initGame() gesetzt, da width/height erst dann bekannt
     let pen = { x: 0, y: 0, w: 120, h: 100 };
@@ -684,6 +687,8 @@
       spawnCoins();
       coinsCollected = 0;
       chickenCaught = false;
+      chickenFreeUntil = 0;
+      gameStartTime = Date.now();
       gameWon = false;
 
       document.getElementById('win-screen').classList.remove('visible');
@@ -831,6 +836,36 @@
       }, 600);
     }
 
+    function triggerTimeUp() {
+      gameWon = true;
+      const winTitle = document.getElementById('win-title');
+      const winText = document.getElementById('win-text');
+
+      if (gameMode === 1) {
+        if (chickenCaught) {
+          winTitle.innerText = 'Verloren! ⏰';
+          winText.innerText = 'Zeit abgelaufen! Du hast das Huhn noch in der Hand — bring es nächstes Mal rechtzeitig ins Gehege!';
+        } else {
+          winTitle.innerText = 'Zeit abgelaufen! ⏰';
+          winText.innerText = 'Du hast das Huhn nicht rechtzeitig eingefangen!';
+        }
+      } else {
+        const loser = players.find(p => p.hasChicken);
+        const winner = players.find(p => !p.hasChicken);
+        if (loser) {
+          winTitle.innerText = `Spieler ${loser.id} verliert! 💀`;
+          winText.innerText = `Zeit abgelaufen! Spieler ${loser.id} hatte das Huhn noch in der Hand.\nSpieler ${winner.id} gewinnt!`;
+        } else {
+          winTitle.innerText = 'Zeit abgelaufen! ⏰';
+          winText.innerText = 'Niemand hatte das Huhn — Unentschieden!';
+        }
+      }
+
+      setTimeout(() => {
+        document.getElementById('win-screen').classList.add('visible');
+      }, 600);
+    }
+
     function gameLoop() {
       ctx.clearRect(0, 0, width, height);
       drawBackground();
@@ -838,6 +873,14 @@
       if (gameMode === 0) {
         requestAnimationFrame(gameLoop);
         return;
+      }
+
+      // Timer prüfen
+      const elapsed = (Date.now() - gameStartTime) / 1000;
+      const timeLeft = Math.max(0, GAME_DURATION - elapsed);
+
+      if (!gameWon && timeLeft <= 0) {
+        triggerTimeUp();
       }
 
       if (!gameWon) {
@@ -861,8 +904,27 @@
           }
         }
 
+        // Im Zweispieler: Spieler berührt Huhn-Träger → Huhn wird befreit
+        if (gameMode === 2 && chickenCaught && !gameWon) {
+          const carrier = players.find(p => p.hasChicken);
+          const robber = players.find(p => !p.hasChicken);
+          if (carrier && robber) {
+            const dx = carrier.x - robber.x;
+            const dy = carrier.y - robber.y;
+            if (Math.sqrt(dx * dx + dy * dy) < carrier.radius + robber.radius) {
+              carrier.hasChicken = false;
+              chickenCaught = false;
+              escapedChicken.caught = false;
+              escapedChicken.x = carrier.x;
+              escapedChicken.y = carrier.y;
+              chickenFreeUntil = Date.now() + 3000;
+            }
+          }
+        }
+
         // Huhn fangen (berühren)
-        if (!chickenCaught) {
+        const canCatch = Date.now() > chickenFreeUntil;
+        if (!chickenCaught && canCatch) {
           for (let p of players) {
             const dx = p.x - escapedChicken.x;
             const dy = p.y - escapedChicken.y;
@@ -894,7 +956,50 @@
         if (c !== escapedChicken || !c.caught) c.draw(ctx);
       });
 
+      // Ungreifbarkeits-Effekt: Huhn blinkt mit blauem Ring
+      if (!chickenCaught && chickenFreeUntil > Date.now()) {
+        const remaining = chickenFreeUntil - Date.now();
+        const blink = Math.floor(Date.now() / 200) % 2 === 0;
+        if (blink) {
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(escapedChicken.x, escapedChicken.y, escapedChicken.radius + 10, 0, Math.PI * 2);
+          ctx.strokeStyle = '#42A5F5';
+          ctx.lineWidth = 3;
+          ctx.stroke();
+          ctx.restore();
+        }
+        // Countdown-Text über dem Huhn
+        ctx.save();
+        ctx.fillStyle = '#1565C0';
+        ctx.font = 'bold 13px Segoe UI';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText(`${Math.ceil(remaining / 1000)}s`, escapedChicken.x, escapedChicken.y - escapedChicken.radius - 8);
+        ctx.restore();
+      }
+
       players.forEach(p => p.draw(ctx));
+
+      // Timer-Anzeige
+      if (gameMode >= 1) {
+        const secs = Math.ceil(timeLeft);
+        const isUrgent = secs <= 10;
+        const blink = isUrgent && Math.floor(Date.now() / 500) % 2 === 0;
+
+        ctx.save();
+        ctx.fillStyle = blink ? '#D32F2F' : (isUrgent ? '#E53935' : 'rgba(0,0,0,0.65)');
+        ctx.beginPath();
+        ctx.roundRect(width / 2 - 52, 18, 104, 40, 10);
+        ctx.fill();
+
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = `bold ${isUrgent ? 26 : 22}px Segoe UI`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(`⏱ ${secs}s`, width / 2, 38);
+        ctx.restore();
+      }
 
       requestAnimationFrame(gameLoop);
     }
