@@ -12,7 +12,6 @@
       padding: 0;
       overflow: hidden;
       background-color: #7CB342;
-      /* Vibrant grass green */
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
       user-select: none;
     }
@@ -21,7 +20,6 @@
       display: block;
     }
 
-    /* Farm Dirt Pattern Background Overlay */
     .farm-bg {
       position: absolute;
       top: 0;
@@ -166,21 +164,93 @@
       box-shadow: 0 2px 5px rgba(255, 152, 0, 0.4);
     }
 
-    .catch-hint {
+    /* Startbildschirm */
+    #start-screen {
       position: absolute;
-      color: white;
-      font-weight: bold;
-      font-size: 14px;
-      background: rgba(0, 0, 0, 0.6);
-      padding: 4px 8px;
-      border-radius: 12px;
-      pointer-events: none;
-      transition: opacity 0.2s;
-      opacity: 0;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0, 0, 0, 0.75);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 20;
     }
 
-    .catch-hint.visible {
-      opacity: 1;
+    #start-screen.hidden {
+      display: none;
+    }
+
+    .start-box {
+      background: white;
+      padding: 50px 60px;
+      border-radius: 24px;
+      text-align: center;
+      box-shadow: 0 15px 35px rgba(0,0,0,0.4);
+      max-width: 420px;
+    }
+
+    .start-box h2 {
+      font-size: 36px;
+      color: #2E7D32;
+      margin: 0 0 10px 0;
+    }
+
+    .start-box p {
+      font-size: 16px;
+      color: #555;
+      margin-bottom: 30px;
+    }
+
+    .mode-buttons {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .mode-btn {
+      background: linear-gradient(135deg, #4CAF50, #388E3C);
+      color: white;
+      border: none;
+      padding: 16px 32px;
+      font-size: 20px;
+      border-radius: 12px;
+      cursor: pointer;
+      font-weight: bold;
+      box-shadow: 0 4px 10px rgba(76, 175, 80, 0.4);
+      transition: all 0.2s ease;
+    }
+
+    .mode-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 15px rgba(76, 175, 80, 0.5);
+    }
+
+    .mode-btn:active {
+      transform: translateY(1px);
+    }
+
+    .mode-btn.p2 {
+      background: linear-gradient(135deg, #FF9800, #F57C00);
+      box-shadow: 0 4px 10px rgba(255, 152, 0, 0.4);
+    }
+
+    .mode-btn.p2:hover {
+      box-shadow: 0 6px 15px rgba(255, 152, 0, 0.5);
+    }
+
+    /* Münzen-Anzeige */
+    #coin-display {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      background: rgba(255,255,255,0.9);
+      border-radius: 14px;
+      padding: 12px 20px;
+      font-size: 18px;
+      font-weight: bold;
+      color: #333;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      pointer-events: none;
+      display: none;
     }
   </style>
 </head>
@@ -189,15 +259,28 @@
   <div class="farm-bg"></div>
   <canvas id="gameCanvas"></canvas>
 
+  <!-- Startbildschirm -->
+  <div id="start-screen">
+    <div class="start-box">
+      <h2>Hühnerjagd 🐔</h2>
+      <p>Fange das entwischte Huhn und sammle alle 15 Münzen ein!</p>
+      <div class="mode-buttons">
+        <button class="mode-btn" onclick="startGame(1)">🧑 Einzelspieler</button>
+        <button class="mode-btn p2" onclick="startGame(2)">👥 Zweispieler</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Münzen-Anzeige -->
+  <div id="coin-display">🪙 <span id="coin-count">0</span> / 15</div>
+
   <div id="ui-layer">
     <div>
-      <div class="panel">
+      <div class="panel" id="info-panel" style="display:none;">
         <h1>Hühnerjagd 🐔</h1>
         <p>Ein Huhn (mit dem <strong>roten Kamm</strong>) ist entwischt!</p>
-        <div class="controls-hint">
-          <div><span class="key">WASD</span> Spieler 1</div>
-          <div><span class="key">Pfeile</span> Spieler 2</div>
-        </div>
+        <p>Sammle alle 15 Münzen ein! 🪙</p>
+        <div class="controls-hint" id="controls-hint"></div>
       </div>
     </div>
   </div>
@@ -205,15 +288,14 @@
   <div id="win-screen">
     <div class="win-box">
       <h2 id="win-title">Gefangen! 🎉</h2>
-      <p>Du hast das entwischte Huhn wieder eingefangen und sicher auf dem Arm.</p>
-      <button onclick="resetGame()">Nochmal spielen</button>
+      <p id="win-text">Du hast das entwischte Huhn wieder eingefangen und alle Münzen gesammelt!</p>
+      <button onclick="backToMenu()">Zurück zum Menü</button>
     </div>
   </div>
 
   <script>
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
-    const catchHint = document.getElementById('catchHint');
 
     let width, height;
 
@@ -264,6 +346,7 @@
         this.hasChicken = false;
         this.color = color;
         this.shirtColor = shirtColor;
+        this.coins = 0;
       }
 
       update() {
@@ -293,7 +376,6 @@
           this.y += vy * currentSpeed;
         }
 
-        // Boundary collision (stay within screen, accounting for fence)
         const margin = 20 + this.radius;
         this.x = Math.max(margin, Math.min(width - margin, this.x));
         this.y = Math.max(margin, Math.min(height - margin, this.y));
@@ -303,7 +385,6 @@
         ctx.save();
         ctx.translate(this.x, this.y);
 
-        // Add running wobble
         let isMoving = false;
         if (this.id === 1 && (keys.w || keys.a || keys.s || keys.d)) isMoving = true;
         if (this.id === 2 && (keys.ArrowUp || keys.ArrowLeft || keys.ArrowDown || keys.ArrowRight)) isMoving = true;
@@ -314,7 +395,6 @@
         }
         ctx.rotate(this.angle + wobble);
 
-        // Body
         ctx.fillStyle = this.shirtColor;
         ctx.beginPath();
         ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
@@ -323,20 +403,18 @@
         ctx.lineWidth = 2.5;
         ctx.stroke();
 
-        // Head/Hat
-        ctx.fillStyle = '#FFE0B2'; // Skin
+        ctx.fillStyle = '#FFE0B2';
         ctx.beginPath();
         ctx.arc(0, 0, this.radius * 0.65, 0, Math.PI * 2);
         ctx.fill();
 
-        ctx.fillStyle = this.color; // Hat color
+        ctx.fillStyle = this.color;
         ctx.beginPath();
         ctx.arc(0, 0, this.radius * 0.85, -Math.PI / 2 - 0.2, Math.PI / 2 + 0.2);
         ctx.fill();
         ctx.strokeStyle = '#333';
         ctx.stroke();
 
-        // Hands
         ctx.fillStyle = '#FFE0B2';
         ctx.beginPath();
         ctx.arc(this.radius * 0.9, 12, 7, 0, Math.PI * 2);
@@ -346,7 +424,6 @@
         ctx.fill();
 
         if (this.hasChicken) {
-          // Draw caught chicken in arms
           ctx.fillStyle = '#FFFFFF';
           ctx.beginPath();
           ctx.ellipse(this.radius * 0.8, 0, 14, 10, 0, 0, Math.PI * 2);
@@ -354,12 +431,10 @@
           ctx.strokeStyle = '#E0E0E0';
           ctx.stroke();
 
-          // Chicken Head
           ctx.beginPath();
           ctx.arc(this.radius * 1.3, 0, 8, 0, Math.PI * 2);
           ctx.fill();
 
-          // Beak
           ctx.fillStyle = '#FFCA28';
           ctx.beginPath();
           ctx.moveTo(this.radius * 1.3 + 5, -3);
@@ -367,7 +442,6 @@
           ctx.lineTo(this.radius * 1.3 + 5, 3);
           ctx.fill();
 
-          // Comb
           ctx.fillStyle = '#F44336';
           ctx.beginPath();
           ctx.arc(this.radius * 1.3, -6, 4, 0, Math.PI * 2);
@@ -381,7 +455,6 @@
 
     class Chicken {
       constructor(isEscaped = false) {
-        // Ensure they don't spawn right on top of the player
         do {
           this.x = 50 + Math.random() * (width - 100);
           this.y = 50 + Math.random() * (height - 100);
@@ -396,8 +469,6 @@
 
         this.wanderTimer = 0;
         this.targetAngle = this.angle;
-
-        // For animation
         this.walkCycle = Math.random() * Math.PI * 2;
       }
 
@@ -422,17 +493,13 @@
           const dy = closestPlayer.y - this.y;
 
           if (this.isEscaped && closestDist < 250) {
-            // Escaped chicken flees aggressively
             this.targetAngle = Math.atan2(-dy, -dx);
-            // Add slight random deviation so it doesn't just run straight into corners and get stuck
             this.targetAngle += (Math.random() - 0.5) * 0.5;
             this.speed = this.baseSpeed;
           } else if (closestDist < 80 && !this.isEscaped) {
-            // Normal chickens move away gently
             this.targetAngle = Math.atan2(-dy, -dx) + (Math.random() - 0.5);
             this.speed = this.baseSpeed * 1.5;
           } else {
-            // Wander
             this.speed = this.baseSpeed * 0.6;
             this.wanderTimer--;
             if (this.wanderTimer <= 0) {
@@ -442,7 +509,6 @@
           }
         }
 
-        // Smooth rotation
         let dAngle = this.targetAngle - this.angle;
         while (dAngle > Math.PI) dAngle -= Math.PI * 2;
         while (dAngle < -Math.PI) dAngle += Math.PI * 2;
@@ -451,10 +517,8 @@
         this.x += Math.cos(this.angle) * this.speed;
         this.y += Math.sin(this.angle) * this.speed;
 
-        // Animate walk cycle based on speed
         this.walkCycle += this.speed * 0.15;
 
-        // Boundaries
         const margin = 20 + this.radius;
         if (this.x < margin || this.x > width - margin) {
           this.targetAngle = Math.PI - this.targetAngle;
@@ -475,7 +539,6 @@
         let wobble = Math.sin(this.walkCycle) * 0.1;
         ctx.rotate(this.angle + wobble);
 
-        // Chicken body
         ctx.fillStyle = '#FAFAFA';
         ctx.beginPath();
         ctx.ellipse(0, 0, this.radius, this.radius * 0.75, 0, 0, Math.PI * 2);
@@ -484,7 +547,6 @@
         ctx.lineWidth = 1;
         ctx.stroke();
 
-        // Wings
         ctx.fillStyle = '#F5F5F5';
         let wingFlap = Math.abs(Math.sin(this.walkCycle)) * 3;
         ctx.beginPath();
@@ -496,12 +558,11 @@
         ctx.fill();
         ctx.stroke();
 
-        // Head
+        ctx.fillStyle = '#FAFAFA';
         ctx.beginPath();
         ctx.arc(this.radius * 0.6, 0, this.radius * 0.55, 0, Math.PI * 2);
         ctx.fill();
 
-        // Beak
         ctx.fillStyle = '#FFCA28';
         ctx.beginPath();
         ctx.moveTo(this.radius * 1.1, -4);
@@ -509,15 +570,14 @@
         ctx.lineTo(this.radius * 1.1, 4);
         ctx.fill();
 
-        // Comb
         if (this.isEscaped) {
-          ctx.fillStyle = '#D32F2F'; // Distinct Red
+          ctx.fillStyle = '#D32F2F';
           ctx.beginPath();
           ctx.arc(this.radius * 0.5, -this.radius * 0.5, 4.5, 0, Math.PI * 2);
           ctx.arc(this.radius * 0.8, -this.radius * 0.4, 3.5, 0, Math.PI * 2);
           ctx.fill();
         } else {
-          ctx.fillStyle = '#FF8A80'; // Pale red
+          ctx.fillStyle = '#FF8A80';
           ctx.beginPath();
           ctx.arc(this.radius * 0.6, -this.radius * 0.4, 2.5, 0, Math.PI * 2);
           ctx.fill();
@@ -527,16 +587,78 @@
       }
     }
 
+    class Coin {
+      constructor() {
+        const margin = 60;
+        this.x = margin + Math.random() * (width - margin * 2);
+        this.y = margin + Math.random() * (height - margin * 2);
+        this.radius = 11;
+        this.collected = false;
+        this.pulse = Math.random() * Math.PI * 2;
+      }
+
+      update() {
+        this.pulse += 0.05;
+      }
+
+      draw(ctx) {
+        if (this.collected) return;
+
+        const scale = 1 + Math.sin(this.pulse) * 0.08;
+
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.scale(scale, scale);
+
+        // Münze
+        ctx.beginPath();
+        ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+        ctx.fillStyle = '#FFD700';
+        ctx.fill();
+        ctx.strokeStyle = '#FFA000';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // €-Symbol
+        ctx.fillStyle = '#B8860B';
+        ctx.font = 'bold 12px Segoe UI';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('€', 0, 0);
+
+        ctx.restore();
+      }
+    }
+
+    const TOTAL_COINS = 15;
     let players = [];
     let chickens = [];
+    let coins = [];
     let escapedChicken;
     let gameWon = false;
+    let gameMode = 0; // 1 = Einzelspieler, 2 = Zweispieler
+    let chickenCaught = false;
+    let coinsCollected = 0;
+
+    function spawnCoins() {
+      coins = [];
+      for (let i = 0; i < TOTAL_COINS; i++) {
+        coins.push(new Coin());
+      }
+    }
 
     function initGame() {
-      players = [
-        new Player(1, width / 2 - 100, height / 2, '#FFCA28', '#1976D2'),
-        new Player(2, width / 2 + 100, height / 2, '#81C784', '#D32F2F')
-      ];
+      if (gameMode === 1) {
+        players = [
+          new Player(1, width / 2, height / 2, '#FFCA28', '#1976D2')
+        ];
+      } else {
+        players = [
+          new Player(1, width / 2 - 100, height / 2, '#FFCA28', '#1976D2'),
+          new Player(2, width / 2 + 100, height / 2, '#81C784', '#D32F2F')
+        ];
+      }
+
       chickens = [];
       for (let i = 0; i < 20; i++) {
         chickens.push(new Chicken(false));
@@ -544,15 +666,44 @@
       escapedChicken = new Chicken(true);
       chickens.push(escapedChicken);
 
+      spawnCoins();
+      coinsCollected = 0;
+      chickenCaught = false;
       gameWon = false;
+
       document.getElementById('win-screen').classList.remove('visible');
+      document.getElementById('coin-display').style.display = 'block';
+      updateCoinDisplay();
     }
 
-    window.resetGame = function () {
+    function updateCoinDisplay() {
+      document.getElementById('coin-count').textContent = coinsCollected;
+    }
+
+    window.startGame = function(mode) {
+      gameMode = mode;
+      document.getElementById('start-screen').classList.add('hidden');
+
+      const hint = document.getElementById('controls-hint');
+      if (mode === 1) {
+        hint.innerHTML = '<div><span class="key">WASD</span> Bewegen</div>';
+      } else {
+        hint.innerHTML = '<div><span class="key">WASD</span> Spieler 1</div><div><span class="key">Pfeile</span> Spieler 2</div>';
+      }
+      document.getElementById('info-panel').style.display = 'inline-block';
+
       initGame();
     };
 
-    // Add some basic grass details for the background
+    window.backToMenu = function() {
+      document.getElementById('win-screen').classList.remove('visible');
+      document.getElementById('start-screen').classList.remove('hidden');
+      document.getElementById('info-panel').style.display = 'none';
+      document.getElementById('coin-display').style.display = 'none';
+      gameWon = false;
+      gameMode = 0;
+    };
+
     const grassPatches = [];
     for (let i = 0; i < 100; i++) {
       grassPatches.push({
@@ -563,17 +714,14 @@
     }
 
     function drawBackground() {
-      // Draw fence
       ctx.strokeStyle = '#5D4037';
       ctx.lineWidth = 12;
       ctx.strokeRect(6, 6, width - 12, height - 12);
 
-      // Inner fence detail
       ctx.strokeStyle = '#8D6E63';
       ctx.lineWidth = 4;
       ctx.strokeRect(12, 12, width - 24, height - 24);
 
-      // Draw grass patches
       ctx.fillStyle = '#689F38';
       grassPatches.forEach(p => {
         ctx.beginPath();
@@ -582,43 +730,78 @@
       });
     }
 
-    function gameLoop() {
-      if (!gameWon) {
-        players.forEach(p => p.update());
-        chickens.forEach(c => c.update(players));
+    function checkWin() {
+      if (chickenCaught && coinsCollected >= TOTAL_COINS) {
+        gameWon = true;
+        const winTitle = document.getElementById('win-title');
+        const winText = document.getElementById('win-text');
 
-        // Catch logic
-        for (let p of players) {
-          const dx = p.x - escapedChicken.x;
-          const dy = p.y - escapedChicken.y;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-
-          if (dist < 40) {
-            escapedChicken.caught = true;
-            p.hasChicken = true;
-            gameWon = true;
-            
-            const winTitle = document.getElementById('win-title');
-            if (winTitle) {
-              winTitle.innerText = `Spieler ${p.id} gewinnt! 🎉`;
-            }
-
-            // Add small win animation
-            setTimeout(() => {
-              document.getElementById('win-screen').classList.add('visible');
-            }, 800);
-            break;
-          }
+        if (gameMode === 1) {
+          winTitle.innerText = 'Gewonnen! 🎉';
+          winText.innerText = `Du hast das Huhn gefangen und alle ${TOTAL_COINS} Münzen gesammelt!`;
+        } else {
+          const catcherName = players.find(p => p.hasChicken)?.id;
+          winTitle.innerText = `Spieler ${catcherName} gewinnt! 🎉`;
+          const p1coins = players[0].coins;
+          const p2coins = players[1].coins;
+          winText.innerText = `Huhn gefangen & alle Münzen gesammelt!\nSpieler 1: ${p1coins} 🪙  |  Spieler 2: ${p2coins} 🪙`;
         }
-      } else {
-        players.forEach(p => p.update());
-        chickens.forEach(c => c.update(players));
-      }
 
+        setTimeout(() => {
+          document.getElementById('win-screen').classList.add('visible');
+        }, 800);
+      }
+    }
+
+    function gameLoop() {
       ctx.clearRect(0, 0, width, height);
       drawBackground();
 
-      // Draw all chickens except the caught one
+      if (gameMode === 0) {
+        requestAnimationFrame(gameLoop);
+        return;
+      }
+
+      if (!gameWon) {
+        players.forEach(p => p.update());
+        chickens.forEach(c => c.update(players));
+        coins.forEach(c => c.update());
+
+        // Münzen einsammeln
+        for (let p of players) {
+          for (let coin of coins) {
+            if (!coin.collected) {
+              const dx = p.x - coin.x;
+              const dy = p.y - coin.y;
+              if (Math.sqrt(dx * dx + dy * dy) < p.radius + coin.radius) {
+                coin.collected = true;
+                coinsCollected++;
+                p.coins++;
+                updateCoinDisplay();
+              }
+            }
+          }
+        }
+
+        // Huhn fangen
+        if (!chickenCaught) {
+          for (let p of players) {
+            const dx = p.x - escapedChicken.x;
+            const dy = p.y - escapedChicken.y;
+            if (Math.sqrt(dx * dx + dy * dy) < 40) {
+              escapedChicken.caught = true;
+              p.hasChicken = true;
+              chickenCaught = true;
+              break;
+            }
+          }
+        }
+
+        checkWin();
+      }
+
+      coins.forEach(c => c.draw(ctx));
+
       chickens.forEach(c => {
         if (c !== escapedChicken || !c.caught) c.draw(ctx);
       });
@@ -628,7 +811,6 @@
       requestAnimationFrame(gameLoop);
     }
 
-    initGame();
     gameLoop();
   </script>
 </body>
